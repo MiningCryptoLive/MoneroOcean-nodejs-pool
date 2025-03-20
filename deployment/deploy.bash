@@ -7,10 +7,10 @@ API_DNS=$2
 CF_DNS_API_TOKEN=$3
 CERTBOT_EMAIL=$4
 
-test -z $WWW_DNS && WWW_DNS="moneroocean.stream"
-test -z $API_DNS && API_DNS="api.moneroocean.stream"
+test -z $WWW_DNS && WWW_DNS="solopool.pro"
+test -z $API_DNS && API_DNS="api.solopool.pro"
 test -z $CF_DNS_API_TOKEN && CF_DNS_API_TOKEN="n/a"
-test -z $CERTBOT_EMAIL && CERTBOT_EMAIL="support@moneroocean.stream"
+test -z $CERTBOT_EMAIL && CERTBOT_EMAIL="support@solopool.pro"
 
 if [[ $(whoami) != "root" ]]; then
   echo "Please run this script as root"
@@ -60,7 +60,7 @@ echo "dns_cloudflare_api_token=$CF_DNS_API_TOKEN" >/root/dns_cloudflare_api_toke
 chmod 600 /root/dns_cloudflare_api_token.ini
 certbot certonly --non-interactive --agree-tos --email "$CERTBOT_EMAIL" --dns-cloudflare --dns-cloudflare-propagation-seconds 30 --dns-cloudflare-credentials /root/dns_cloudflare_api_token.ini -d $WWW_DNS
 certbot certonly --non-interactive --agree-tos --email "$CERTBOT_EMAIL" --dns-cloudflare --dns-cloudflare-propagation-seconds 30 --dns-cloudflare-credentials /root/dns_cloudflare_api_token.ini -d $API_DNS
-cat >/etc/nginx/sites-enabled/default <<EOF
+cat >/etc/nginx/sites-enabled/solopool.pro <<EOF
 server {
 	listen 80;
 	location /leafApi {
@@ -99,7 +99,7 @@ server {
 	root /var/www/mo/;
         index index.html;
 	gzip on;
-        add_header Content-Security-Policy "default-src 'none'; connect-src https://api.moneroocean.stream; font-src 'self'; img-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'" always;
+        add_header Content-Security-Policy "default-src 'none'; connect-src https://api.solopool.pro; font-src 'self'; img-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'" always;
         add_header X-Frame-Options "SAMEORIGIN" always;
 	ssl_certificate /etc/letsencrypt/live/$WWW_DNS/fullchain.pem;
 	ssl_certificate_key /etc/letsencrypt/live/$WWW_DNS/privkey.pem;
@@ -116,52 +116,6 @@ systemctl daemon-reload
 systemctl restart nginx
 
 DEBIAN_FRONTEND=noninteractive apt-get install -y git make g++ cmake libssl-dev libunbound-dev libboost-dev libboost-system-dev libboost-date-time-dev libboost-dev libboost-system-dev libboost-date-time-dev libboost-filesystem-dev libboost-thread-dev libboost-chrono-dev libboost-locale-dev libboost-regex-dev libboost-regex-dev libboost-program-options-dev libzmq3-dev
-cd /usr/local/src
-git clone https://github.com/monero-project/monero.git
-cd monero
-git checkout v0.18.3.4
-git submodule update --init
-USE_SINGLE_BUILDDIR=1 make -j$(nproc) release || USE_SINGLE_BUILDDIR=1 make -j1 release
-
-(cat <<EOF
-set -x
-mkdir ~/wallets
-cd ~/wallets
-echo pass >~/wallets/wallet_pass
-echo 1 | /usr/local/src/monero/build/release/bin/monero-wallet-cli --offline --create-address-file --generate-new-wallet ~/wallets/wallet --password-file ~/wallets/wallet_pass --command address
-echo 1 | /usr/local/src/monero/build/release/bin/monero-wallet-cli --offline --create-address-file --generate-new-wallet ~/wallets/wallet_fee --password-file ~/wallets/wallet_pass --command address
-EOF
-) | su user -l
-echo; echo; echo
-read -p "*** Write down your seeds for wallet and wallet_fee listed above and press ENTER to continue ***"
-
-cat >/lib/systemd/system/monero.service <<'EOF'
-[Unit]
-Description=Monero Daemon
-After=network.target
-
-[Service]
-ExecStart=/usr/local/src/monero/build/release/bin/monerod --hide-my-port --prune-blockchain --enable-dns-blocklist --no-zmq --out-peers 64 --non-interactive --restricted-rpc --block-notify '/bin/bash /home/user/nodejs-pool/block_notify.sh'
-Restart=always
-User=monerodaemon
-Nice=10
-CPUQuota=400%
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-useradd -m monerodaemon -d /home/monerodaemon
-systemctl daemon-reload
-systemctl enable monero
-systemctl start monero
-
-sleep 30
-echo "Please wait until Monero daemon is fully synced"
-tail -f /home/monerodaemon/.bitmonero/bitmonero.log 2>/dev/null | grep Synced &
-( tail -F -n0 /home/monerodaemon/.bitmonero/bitmonero.log & ) | egrep -q "You are now synchronized with the network"
-killall tail 2>/dev/null
-echo "Monero daemon is synced"
 
 DEBIAN_FRONTEND=noninteractive apt-get install -y mysql-server
 ROOT_SQL_PASS=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1)
